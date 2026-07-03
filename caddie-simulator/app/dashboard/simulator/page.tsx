@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+
+import { currentUser } from "../../../lib/roles";
 
 import {
   courseData,
@@ -29,325 +31,439 @@ import {
 } from "../../../lib/simulatorEngine";
 
 import {
-  playerProfiles,
+  generateRandomPlayerProfile,
+  getMissingClubs,
   type PlayerProfile,
 } from "../../../lib/playerProfiles";
+
+import {
+  generateReflection,
+  type ReflectionResult,
+} from "../../../lib/reflectionEngine";
+
+import {
+  createSimulationResultId,
+  saveSimulationResult,
+  type StoredSimulationResult,
+} from "../../../lib/simulationStorage";
+
+import {
+  getShotLandingResult,
+  type LandingResult,
+  type LandingZoneType,
+} from "../../../lib/landingEngine";
 
 const ballStartPosition = {
   left: "50%",
   top: "88%",
 };
 
+type SimulationSummary = {
+  id: string;
+  caddieName: string;
+  playerName: string;
+  handicap: number;
+  hole: number;
+  par: number;
+  club: ClubChoice;
+  target: string;
+  landing: string;
+  score: number;
+  quality: string;
+  riskLevel: string;
+  mistakePattern: string;
+  trainingFocus: string;
+};
+
 export default function SimulatorPage() {
-  const [selectedPlayerId, setSelectedPlayerId] = useState(playerProfiles[0].id);
+  const isMobile = useIsMobile();
+
+  const [currentPlayer, setCurrentPlayer] = useState<PlayerProfile | null>(
+    null
+  );
+
   const [selectedHole, setSelectedHole] = useState(1);
   const [selectedTee, setSelectedTee] = useState<TeeChoice>("white");
-  const [club, setClub] = useState<ClubChoice>("8 Iron");
+  const [club, setClub] = useState<ClubChoice>("Driver");
   const [target, setTarget] = useState<TargetChoice>("safeAim");
   const [isSwinging, setIsSwinging] = useState(false);
   const [ballPosition, setBallPosition] = useState(ballStartPosition);
+  const [landing, setLanding] = useState<LandingResult | null>(null);
   const [result, setResult] = useState<ShotResult | null>(null);
+  const [reflection, setReflection] = useState<ReflectionResult | null>(null);
+  const [summary, setSummary] = useState<SimulationSummary | null>(null);
+  const [isDecisionOpen, setIsDecisionOpen] = useState(true);
 
-  const currentPlayer =
-    playerProfiles.find((player) => player.id === selectedPlayerId) ??
-    playerProfiles[0];
+  useEffect(() => {
+    setCurrentPlayer(generateRandomPlayerProfile());
+  }, []);
 
   const holeData =
     courseData.find((hole) => hole.hole === selectedHole) ?? courseData[0];
 
   const greenData = getGreenLayoutByHole(selectedHole);
 
-  const selectedClubAvailable = isClubAvailable(currentPlayer, club);
+  const selectedClubAvailable = currentPlayer
+    ? isClubAvailable(currentPlayer, club)
+    : false;
 
-  function changePlayer(playerId: string) {
-    setSelectedPlayerId(playerId);
-    setResult(null);
-    setBallPosition(ballStartPosition);
+  function generateNewPlayer() {
+    setCurrentPlayer(generateRandomPlayerProfile());
+    resetScenario();
   }
 
   function changeHole(holeNumber: number) {
     setSelectedHole(holeNumber);
-    setResult(null);
-    setBallPosition(ballStartPosition);
+    resetScenario();
   }
 
-  function resetShot() {
+  function resetScenario() {
     setIsSwinging(false);
     setBallPosition(ballStartPosition);
+    setLanding(null);
     setResult(null);
+    setReflection(null);
+    setSummary(null);
   }
 
   function handleSwing() {
+    setLanding(null);
     setResult(null);
+    setReflection(null);
+    setSummary(null);
 
-    if (!selectedClubAvailable) {
-      setResult(createUnavailableClubResult(currentPlayer, club));
+    if (!currentPlayer) {
       return;
     }
+
+    if (!selectedClubAvailable) {
+      const unavailableResult = createUnavailableClubResult(currentPlayer, club);
+      setResult(unavailableResult);
+      setReflection(generateReflection(unavailableResult));
+      return;
+    }
+
+    const shotLanding = getShotLandingResult({
+      holeData,
+      greenData,
+      club,
+      target,
+      selectedTee,
+    });
 
     setIsSwinging(true);
     setBallPosition(ballStartPosition);
 
     setTimeout(() => {
-      setBallPosition(getBallTargetPosition(target, greenData));
+      setLanding(shotLanding);
+      setBallPosition(shotLanding.visualPosition);
     }, 300);
 
     setTimeout(() => {
       setIsSwinging(false);
 
-      setResult(
-        evaluateShot({
-          holeData,
-          greenData,
-          club,
-          target,
-          selectedTee,
-        })
-      );
+      const shotResult = evaluateShot({
+        holeData,
+        greenData,
+        club,
+        target,
+        selectedTee,
+      });
+
+      setResult(shotResult);
+      setReflection(generateReflection(shotResult));
     }, 1400);
   }
 
-  return (
-    <div>
-      <h1>Caddie Simulator</h1>
-      <p>
-        Visual training simulator using real hole data, green pin position,
-        player profile, club bag, club selection, and hazard decision logic.
-      </p>
+  function finishSimulation() {
+    if (!currentPlayer || !result || !reflection) {
+      return;
+    }
 
-      <div style={topControlStyle}>
-        <div>
-          <label style={labelStyle}>Select Player</label>
-          <select
-            value={selectedPlayerId}
-            onChange={(event) => changePlayer(event.target.value)}
-            style={selectStyle}
-          >
-            {playerProfiles.map((player) => (
-              <option key={player.id} value={player.id}>
-                {player.name} — HCP {player.handicap}
-              </option>
-            ))}
-          </select>
+    const completedAt = new Date().toISOString();
+    const simulationId = createSimulationResultId();
+
+    const storedResult: StoredSimulationResult = {
+      id: simulationId,
+      completedAt,
+
+      caddieId: currentUser.caddieId ?? "CAD-DEMO",
+      caddieName: currentUser.name,
+
+      player: {
+        name: currentPlayer.name,
+        handicap: currentPlayer.handicap,
+        skillLevel: currentPlayer.skillLevel,
+        playStyle: currentPlayer.playStyle,
+        strength: currentPlayer.strength,
+        weakness: currentPlayer.weakness,
+        clubBag: currentPlayer.clubBag,
+      },
+
+      hole: {
+        number: holeData.hole,
+        par: holeData.par,
+        tee: holeData.par === 3 ? selectedTee : "default",
+        mainTarget: holeData.target,
+      },
+
+      decision: {
+        club,
+        target,
+        targetLabel: targetLabels[target],
+      },
+
+      result: {
+        score: result.score,
+        quality: result.quality,
+        riskLevel: result.riskLevel,
+        mistakePattern: result.mistakePattern,
+        riskFactors: result.riskFactors,
+        feedback: result.feedback,
+        recommendation: result.recommendation,
+      },
+
+      reflection,
+    };
+
+    saveSimulationResult(storedResult);
+
+    setSummary({
+      id: simulationId,
+      caddieName: currentUser.name,
+      playerName: currentPlayer.name,
+      handicap: currentPlayer.handicap,
+      hole: holeData.hole,
+      par: holeData.par,
+      club,
+      target: targetLabels[target],
+      landing: landing?.title ?? "No landing data",
+      score: result.score,
+      quality: result.quality,
+      riskLevel: result.riskLevel,
+      mistakePattern: result.mistakePattern,
+      trainingFocus: result.recommendation,
+    });
+  }
+
+  return (
+    <div style={pageStyle}>
+      <section style={heroStyle}>
+        <div style={heroContentStyle}>
+          <div style={moduleLabelStyle}>LIVE TRAINING MODULE</div>
+
+          <h1 style={heroTitleStyle}>Caddie Simulator</h1>
+
+          <p style={heroTextStyle}>
+            Simulate real tournament scenarios, get caddie recommendations, and
+            make better decisions under pressure.
+          </p>
+
+          <div style={heroActionRowStyle}>
+            <span>▶ How it works</span>
+            <span>▣ View Tutorial</span>
+          </div>
         </div>
 
-        <div>
-          <label style={labelStyle}>Select Hole</label>
+        <div style={heroRightStyle}>
+          <div style={practiceBadgeStyle}>
+            Practice Session <span style={greenDotStyle}></span>
+          </div>
+
+          <span style={sessionTextStyle}>Session 18</span>
+
+          <div style={heroSilhouetteStyle}>
+            <div style={personOneStyle}></div>
+            <div style={personTwoStyle}></div>
+            <div style={bagStyle}></div>
+          </div>
+        </div>
+      </section>
+
+      <section style={controlGridStyle}>
+        <ControlCard
+          label="ASSIGNED COURSE"
+          title="Golf Course"
+          subtitle="Internal Training Course"
+          icon="♣"
+        />
+
+        <div style={controlCardStyle}>
+          <div style={controlHeaderStyle}>
+            <span style={controlIconStyle}>☘</span>
+            <span style={controlLabelStyle}>PLAYER ASSIGNMENT</span>
+          </div>
+
+          <div style={controlContentStyle}>
+            <div>
+              <strong>
+                {currentPlayer ? currentPlayer.name : "Assigning Player"}
+              </strong>
+              <small>
+                {currentPlayer
+                  ? `${currentPlayer.skillLevel} • HCP ${currentPlayer.handicap}`
+                  : "Random profile"}
+              </small>
+            </div>
+
+            <button onClick={generateNewPlayer} style={shuffleButtonStyle}>
+              ⟳
+            </button>
+          </div>
+        </div>
+
+        <div style={controlCardStyle}>
+          <div style={controlHeaderStyle}>
+            <span style={controlIconStyle}>▣</span>
+            <span style={controlLabelStyle}>HOLE & SCENARIO</span>
+          </div>
+
           <select
             value={selectedHole}
             onChange={(event) => changeHole(Number(event.target.value))}
-            style={selectStyle}
+            style={cleanSelectStyle}
           >
             {courseData.map((hole) => (
               <option key={hole.hole} value={hole.hole}>
-                Hole {hole.hole} — Par {hole.par}
+                Hole {hole.hole} • Par {hole.par}
               </option>
             ))}
           </select>
-        </div>
 
-        {holeData.par === 3 && (
-          <div>
-            <label style={labelStyle}>Tee Box</label>
+          {holeData.par === 3 && (
             <select
               value={selectedTee}
               onChange={(event) =>
                 setSelectedTee(event.target.value as TeeChoice)
               }
-              style={selectStyle}
+              style={{ ...cleanSelectStyle, marginTop: 8 }}
             >
-              <option value="black">Black</option>
-              <option value="gold">Gold</option>
-              <option value="blue">Blue</option>
-              <option value="white">White</option>
-              <option value="red">Red</option>
+              <option value="black">Black Tee</option>
+              <option value="gold">Gold Tee</option>
+              <option value="blue">Blue Tee</option>
+              <option value="white">White Tee</option>
+              <option value="red">Red Tee</option>
             </select>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </section>
 
-      <div style={layoutStyle}>
-        <section style={gameAreaStyle}>
-          <CourseVisual
-            holeData={holeData}
-            greenData={greenData}
-            ballPosition={ballPosition}
-            isSwinging={isSwinging}
-          />
-        </section>
+      <section style={isMobile ? mobileMiddleGridStyle : middleGridStyle}>
+        <ScenarioBriefingCard
+          player={currentPlayer}
+          holeData={holeData}
+          greenData={greenData}
+          selectedTee={selectedTee}
+        />
 
-        <aside style={panelStyle}>
-          <h2 style={{ marginTop: 0 }}>Decision Panel</h2>
+        <LiveCourseView
+          holeData={holeData}
+          greenData={greenData}
+          ballPosition={ballPosition}
+          isSwinging={isSwinging}
+          landing={landing}
+          selectedTee={selectedTee}
+          club={club}
+          isMobile={isMobile}
+        />
 
-          <section style={infoSectionStyle}>
-            <h3>Player Briefing</h3>
+        <ConversationCard
+          player={currentPlayer}
+          holeData={holeData}
+          club={club}
+          target={target}
+          landing={landing}
+          result={result}
+        />
+      </section>
 
-            <p>
-              <strong>Name:</strong> {currentPlayer.name}
-            </p>
+      {!isMobile && (
+        <DecisionRecommendation
+          currentPlayer={currentPlayer}
+          club={club}
+          setClub={setClub}
+          target={target}
+          setTarget={setTarget}
+          selectedClubAvailable={selectedClubAvailable}
+          isSwinging={isSwinging}
+          handleSwing={handleSwing}
+          resetScenario={resetScenario}
+          result={result}
+          finishSimulation={finishSimulation}
+        />
+      )}
 
-            <p>
-              <strong>Handicap:</strong> {currentPlayer.handicap}
-            </p>
-
-            <p>
-              <strong>Skill Level:</strong> {currentPlayer.skillLevel}
-            </p>
-
-            <p>
-              <strong>Play Style:</strong> {currentPlayer.playStyle}
-            </p>
-
-            <p>
-              <strong>Strength:</strong> {currentPlayer.strength}
-            </p>
-
-            <p>
-              <strong>Weakness:</strong> {currentPlayer.weakness}
-            </p>
-
-            <div style={clubBagBoxStyle}>
-              <strong>Club Bag:</strong>
-
-              <div style={clubBagListStyle}>
-                {currentPlayer.clubBag.map((clubName) => (
-                  <span key={clubName} style={clubChipStyle}>
-                    {clubName}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section style={infoSectionStyle}>
-            <h3>Hole Briefing</h3>
-
-            <p>
-              <strong>Hole:</strong> {holeData.hole}
-            </p>
-
-            <p>
-              <strong>Par:</strong> {holeData.par}
-            </p>
-
-            <p>
-              <strong>Main Target:</strong> {holeData.target}
-            </p>
-
-            {holeData.par === 3 && (
-              <p>
-                <strong>Distance from {selectedTee} tee:</strong>{" "}
-                {holeData.teeDistances?.[selectedTee] ?? "No data"} m
-              </p>
-            )}
-
-            <p>
-              <strong>Boundary:</strong> {formatBoundary(holeData)}
-            </p>
-          </section>
-
-          {greenData && (
-            <section style={infoSectionStyle}>
-              <h3>Green & Pin</h3>
-
-              <p>
-                <strong>Pin:</strong> {formatPinZone(greenData.pinZone)}
-              </p>
-
-              <p>
-                <strong>Safe Aim:</strong>{" "}
-                {formatPinZone(greenData.safeAimZone)}
-              </p>
-
-              <p>{getGreenStrategyAdvice(greenData)}</p>
-            </section>
+      {isMobile && (
+        <>
+          {!isDecisionOpen && (
+            <button
+              onClick={() => setIsDecisionOpen(true)}
+              style={mobileFloatingButtonStyle}
+            >
+              Decision & Recommendation
+            </button>
           )}
 
-          <section style={infoSectionStyle}>
-            <h3>Caddie Decision</h3>
+          {isDecisionOpen && (
+            <div style={mobileSheetStyle}>
+              <div style={sheetHandleStyle}></div>
 
-            <div style={fieldStyle}>
-              <label style={labelStyle}>Club Recommendation</label>
-
-              <select
-                value={club}
-                onChange={(event) => setClub(event.target.value as ClubChoice)}
-                style={{
-                  ...selectStyle,
-                  borderColor: selectedClubAvailable ? "#cbd5e1" : "#dc2626",
-                }}
-              >
-                {(Object.keys(clubCarryMeters) as ClubChoice[]).map(
-                  (clubName) => (
-                    <option key={clubName} value={clubName}>
-                      {clubName}
-                    </option>
-                  )
-                )}
-              </select>
-
-              <small>Estimated carry: {clubCarryMeters[club]} m</small>
-
-              {!selectedClubAvailable && (
-                <div style={warningBoxStyle}>
-                  This club is not available in {currentPlayer.name}'s bag.
-                  Caddie must adapt the recommendation.
+              <div style={mobileSheetHeaderStyle}>
+                <div>
+                  <span style={controlLabelStyle}>
+                    DECISION & RECOMMENDATION
+                  </span>
+                  <h2 style={mobileSheetTitleStyle}>Caddie Advice</h2>
                 </div>
-              )}
+
+                <button
+                  onClick={() => setIsDecisionOpen(false)}
+                  style={closeSheetButtonStyle}
+                >
+                  ×
+                </button>
+              </div>
+
+              <DecisionRecommendation
+                currentPlayer={currentPlayer}
+                club={club}
+                setClub={setClub}
+                target={target}
+                setTarget={setTarget}
+                selectedClubAvailable={selectedClubAvailable}
+                isSwinging={isSwinging}
+                handleSwing={handleSwing}
+                resetScenario={resetScenario}
+                result={result}
+                finishSimulation={finishSimulation}
+                compact
+              />
             </div>
+          )}
+        </>
+      )}
 
-            <div style={fieldStyle}>
-              <label style={labelStyle}>Target Recommendation</label>
-
-              <select
-                value={target}
-                onChange={(event) =>
-                  setTarget(event.target.value as TargetChoice)
-                }
-                style={selectStyle}
-              >
-                {(Object.entries(targetLabels) as [TargetChoice, string][]).map(
-                  ([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  )
-                )}
-              </select>
-            </div>
-
-            <button
-              onClick={handleSwing}
-              disabled={isSwinging}
-              style={{
-                ...primaryButtonStyle,
-                opacity: isSwinging ? 0.6 : 1,
-                cursor: isSwinging ? "not-allowed" : "pointer",
-              }}
-            >
-              {isSwinging ? "Swinging..." : "Start Swing"}
-            </button>
-
-            <button onClick={resetShot} style={secondaryButtonStyle}>
-              Reset Ball
-            </button>
-          </section>
+      {(landing || result || reflection || summary) && (
+        <section style={feedbackGridStyle}>
+          {landing && (
+            <FeedbackCard title={landing.title} tone="cyan">
+              <p>{landing.description}</p>
+              <p>
+                <strong>Caddie says:</strong> {landing.caddieLine}
+              </p>
+              <p>
+                <strong>Coach note:</strong> {landing.coachNote}
+              </p>
+            </FeedbackCard>
+          )}
 
           {result && (
-            <section style={resultBoxStyle}>
-              <h3>{result.title}</h3>
-
-              <p>
-                <strong>Score:</strong> {result.score}
-              </p>
-
-              <p>
-                <strong>Quality:</strong> {result.quality}
-              </p>
-
-              <p>
-                <strong>Risk Level:</strong> {result.riskLevel}
-              </p>
+            <FeedbackCard title={result.title} tone="blue">
+              <div style={resultMiniGridStyle}>
+                <MiniMetric label="Score" value={String(result.score)} />
+                <MiniMetric label="Quality" value={result.quality} />
+                <MiniMetric label="Risk" value={result.riskLevel} />
+              </div>
 
               <p>
                 <strong>Mistake Pattern:</strong> {result.mistakePattern}
@@ -356,115 +472,490 @@ export default function SimulatorPage() {
               <p>{result.feedback}</p>
 
               <p>
-                <strong>Recommendation:</strong> {result.recommendation}
+                <strong>Training Focus:</strong> {result.recommendation}
               </p>
-
-              {result.riskFactors.length > 0 && (
-                <div>
-                  <strong>Risk Factors:</strong>
-
-                  <ul>
-                    {result.riskFactors.map((factor) => (
-                      <li key={factor}>{factor}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </section>
+            </FeedbackCard>
           )}
 
-          <section style={infoSectionStyle}>
-            <h3>Hazard List</h3>
-
-            {holeData.landmarks.map((landmark, index) => (
-              <p key={`${landmark.label}-${index}`} style={{ marginBottom: 8 }}>
-                • {landmark.distance ? `${landmark.distance}m — ` : ""}
-                {landmark.label}
+          {reflection && (
+            <FeedbackCard title="Learning Reflection" tone="green">
+              <p>
+                <strong>Experience:</strong> {reflection.experience}
               </p>
-            ))}
-          </section>
-        </aside>
+              <p>
+                <strong>Observation:</strong> {reflection.observation}
+              </p>
+              <p>
+                <strong>Concept:</strong> {reflection.concept}
+              </p>
+              <p>
+                <strong>Next:</strong> {reflection.nextExperiment}
+              </p>
+            </FeedbackCard>
+          )}
+
+          {summary && (
+            <FeedbackCard title="Simulation Saved" tone="purple">
+              <p>
+                <strong>ID:</strong> {summary.id}
+              </p>
+              <p>
+                <strong>Caddie:</strong> {summary.caddieName}
+              </p>
+              <p>
+                <strong>Player:</strong> {summary.playerName} · HCP{" "}
+                {summary.handicap}
+              </p>
+              <p>
+                <strong>Hole:</strong> {summary.hole} · Par {summary.par}
+              </p>
+              <p>
+                <strong>Score:</strong> {summary.score}
+              </p>
+            </FeedbackCard>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function DecisionRecommendation({
+  currentPlayer,
+  club,
+  setClub,
+  target,
+  setTarget,
+  selectedClubAvailable,
+  isSwinging,
+  handleSwing,
+  resetScenario,
+  result,
+  finishSimulation,
+  compact = false,
+}: {
+  currentPlayer: PlayerProfile | null;
+  club: ClubChoice;
+  setClub: (club: ClubChoice) => void;
+  target: TargetChoice;
+  setTarget: (target: TargetChoice) => void;
+  selectedClubAvailable: boolean;
+  isSwinging: boolean;
+  handleSwing: () => void;
+  resetScenario: () => void;
+  result: ShotResult | null;
+  finishSimulation: () => void;
+  compact?: boolean;
+}) {
+  const visibleClubs = compact
+    ? (Object.keys(clubCarryMeters) as ClubChoice[]).slice(0, 4)
+    : (Object.keys(clubCarryMeters) as ClubChoice[]);
+
+  return (
+    <section style={compact ? compactDecisionSectionStyle : decisionSectionStyle}>
+      {!compact && (
+        <div style={decisionHeaderStyle}>
+          <div>
+            <span style={controlLabelStyle}>DECISION & RECOMMENDATION</span>
+            <h2 style={decisionTitleStyle}>Choose the best caddie advice</h2>
+          </div>
+
+          <span style={scoringImpactStyle}>
+            Scoring Impact {result ? result.score : "--"}
+          </span>
+        </div>
+      )}
+
+      <div
+        style={compact ? compactClubOptionGridStyle : clubOptionGridStyle}
+      >
+        {visibleClubs.map((clubName) => {
+          const isSelected = club === clubName;
+          const isAvailable = currentPlayer
+            ? currentPlayer.clubBag.includes(clubName)
+            : true;
+
+          return (
+            <button
+              key={clubName}
+              onClick={() => setClub(clubName)}
+              style={{
+                ...clubOptionStyle,
+                ...(isSelected ? selectedClubOptionStyle : {}),
+                opacity: isAvailable ? 1 : 0.48,
+              }}
+            >
+              <span style={clubIconStyle}>◒</span>
+
+              <div style={{ textAlign: "left" }}>
+                <strong>{clubName}</strong>
+                <small>{clubCarryMeters[clubName]}m</small>
+              </div>
+
+              {isSelected && <span style={checkCircleStyle}>✓</span>}
+            </button>
+          );
+        })}
+
+        {compact && (
+          <button style={clubOptionStyle}>
+            <span style={clubIconStyle}>＋</span>
+            <div style={{ textAlign: "left" }}>
+              <strong>More</strong>
+              <small>Options</small>
+            </div>
+          </button>
+        )}
+      </div>
+
+      {currentPlayer && !selectedClubAvailable && (
+        <div style={warningBoxStyle}>
+          Club ini tidak ada di bag {currentPlayer.name}. Caddie harus adaptasi
+          dengan club yang tersedia.
+        </div>
+      )}
+
+      <div style={compact ? compactDecisionBottomGridStyle : decisionBottomGridStyle}>
+        <div style={decisionInputGroupStyle}>
+          <label>Target Line</label>
+
+          <select
+            value={target}
+            onChange={(event) => setTarget(event.target.value as TargetChoice)}
+            style={decisionSelectStyle}
+          >
+            {(Object.entries(targetLabels) as [TargetChoice, string][]).map(
+              ([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              )
+            )}
+          </select>
+        </div>
+
+        <DecisionReadout label="Aim Point" value={targetLabels[target]} />
+        <DecisionReadout
+          label="Confidence"
+          value={result ? result.quality : "Medium"}
+        />
+
+        <div style={decisionButtonAreaStyle}>
+          <button
+            onClick={handleSwing}
+            disabled={isSwinging || !currentPlayer}
+            style={{
+              ...submitButtonStyle,
+              opacity: isSwinging || !currentPlayer ? 0.6 : 1,
+              cursor: isSwinging || !currentPlayer ? "not-allowed" : "pointer",
+            }}
+          >
+            {isSwinging ? "Swinging..." : "Submit Recommendation"}
+          </button>
+
+          {result && (
+            <button onClick={finishSimulation} style={saveButtonStyle}>
+              Finish & Save
+            </button>
+          )}
+
+          <button onClick={resetScenario} style={resetButtonStyle}>
+            Reset
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ControlCard({
+  label,
+  title,
+  subtitle,
+  icon,
+}: {
+  label: string;
+  title: string;
+  subtitle: string;
+  icon: string;
+}) {
+  return (
+    <div style={controlCardStyle}>
+      <div style={controlHeaderStyle}>
+        <span style={controlIconStyle}>{icon}</span>
+        <span style={controlLabelStyle}>{label}</span>
+      </div>
+
+      <div style={controlContentStyle}>
+        <div>
+          <strong>{title}</strong>
+          <small>{subtitle}</small>
+        </div>
+
+        <span style={{ color: "#64748b" }}>⌄</span>
       </div>
     </div>
   );
 }
 
-function CourseVisual({
+function ScenarioBriefingCard({
+  player,
+  holeData,
+  greenData,
+  selectedTee,
+}: {
+  player: PlayerProfile | null;
+  holeData: HoleData;
+  greenData: GreenLayout | undefined;
+  selectedTee: TeeChoice;
+}) {
+  return (
+    <div style={panelCardStyle}>
+      <div style={panelHeaderStyle}>
+        <div>
+          <span style={controlLabelStyle}>SCENARIO BRIEFING</span>
+          <h3 style={panelTitleStyle}>Read Before Recommending</h3>
+        </div>
+
+        <span style={activeBadgeStyle}>Active</span>
+      </div>
+
+      <InfoRow
+        label="Player"
+        value={
+          player ? `${player.name} • HCP ${player.handicap}` : "Assigning..."
+        }
+        sideValue={player ? player.playStyle : ""}
+      />
+
+      <InfoRow
+        label="Player Weakness"
+        value={player?.weakness ?? "-"}
+        sideValue={player?.skillLevel ?? ""}
+      />
+
+      <InfoRow
+        label="Hole Target"
+        value={`Hole ${holeData.hole} • Par ${holeData.par}`}
+        sideValue={
+          holeData.par === 3
+            ? `${holeData.teeDistances?.[selectedTee] ?? "-"}m`
+            : "Course data"
+        }
+      />
+
+      <InfoRow
+        label="Green Strategy"
+        value={greenData ? formatPinZone(greenData.safeAimZone) : "-"}
+        sideValue={greenData ? `Pin ${formatPinZone(greenData.pinZone)}` : ""}
+      />
+
+      <InfoRow
+        label="Boundary"
+        value={formatBoundary(holeData)}
+        sideValue="Risk side"
+      />
+
+      {greenData && (
+        <div style={adviceBoxStyle}>{getGreenStrategyAdvice(greenData)}</div>
+      )}
+    </div>
+  );
+}
+
+function LiveCourseView({
   holeData,
   greenData,
   ballPosition,
   isSwinging,
+  landing,
+  selectedTee,
+  club,
+  isMobile,
 }: {
   holeData: HoleData;
   greenData: GreenLayout | undefined;
   ballPosition: { left: string; top: string };
   isSwinging: boolean;
+  landing: LandingResult | null;
+  selectedTee: TeeChoice;
+  club: ClubChoice;
+  isMobile: boolean;
 }) {
+  const trailTop = landing ? Number.parseFloat(landing.visualPosition.top) : 88;
+  const trailHeight = landing ? Math.max(88 - trailTop, 8) : 0;
+
   return (
-    <div style={courseStyle}>
-      <div style={holeBadgeStyle}>
-        Hole {holeData.hole} · Par {holeData.par}
-      </div>
-
-      {holeData.boundaries?.left && holeData.boundaries.left !== "safe" && (
-        <div style={{ ...boundaryStyle, left: 8 }}>
-          LEFT {holeData.boundaries.left.toUpperCase()}
+    <div style={panelCardStyle}>
+      <div style={panelHeaderStyle}>
+        <div>
+          <span style={controlLabelStyle}>LIVE COURSE VIEW</span>
+          <h3 style={panelTitleStyle}>Shot Landing Map</h3>
         </div>
-      )}
 
-      {holeData.boundaries?.right && holeData.boundaries.right !== "safe" && (
-        <div style={{ ...boundaryStyle, right: 8 }}>
-          RIGHT {holeData.boundaries.right.toUpperCase()}
-        </div>
-      )}
-
-      <div style={roughTextureStyle}></div>
-      <div style={fairwayStyle}></div>
-
-      <div style={greenStyle}>
-        <span style={flagIconStyle}>⚑</span>
-
-        {greenData && (
-          <div
-            title={`Pin: ${formatPinZone(greenData.pinZone)}`}
-            style={{
-              ...pinDotStyle,
-              ...getPinDotPosition(greenData.pinZone),
-            }}
-          ></div>
-        )}
-      </div>
-
-      {holeData.landmarks
-        .filter((landmark) => shouldRenderHazard(landmark.type))
-        .map((landmark, index) => (
-          <HazardMarker
-            key={`${landmark.label}-${index}`}
-            landmark={landmark}
-            index={index}
-          />
-        ))}
-
-      <div style={teeBoxStyle}>Tee</div>
-
-      <div style={playerStyle}>
-        <div style={headStyle}></div>
-        <div style={bodyStyle}></div>
-        <div
-          style={{
-            ...clubStyle,
-            transform: isSwinging ? "rotate(-95deg)" : "rotate(-25deg)",
-          }}
-        ></div>
+        <span style={windBadgeStyle}>↗ 6 mph SW</span>
       </div>
 
       <div
         style={{
-          ...ballStyle,
-          left: ballPosition.left,
-          top: ballPosition.top,
+          ...courseViewStyle,
+          height: isMobile ? 360 : 310,
         }}
-      ></div>
+      >
+        <div style={courseSkyStyle}></div>
+        <div style={courseTreeLeftStyle}></div>
+        <div style={courseTreeRightStyle}></div>
+        <div style={courseFairwayStyle}></div>
+        <div style={courseGreenStyle}></div>
+
+        {greenData && (
+          <div
+            style={{
+              ...coursePinStyle,
+              ...getPinDotPosition(greenData.pinZone),
+            }}
+          ></div>
+        )}
+
+        {holeData.landmarks
+          .filter((landmark) => shouldRenderHazard(landmark.type))
+          .map((landmark, index) => (
+            <HazardMarker
+              key={`${landmark.label}-${index}`}
+              landmark={landmark}
+              index={index}
+            />
+          ))}
+
+        {landing && (
+          <>
+            <div
+              style={{
+                ...shotTrailStyle,
+                top: `${trailTop}%`,
+                height: `${trailHeight}%`,
+              }}
+            ></div>
+
+            <div
+              style={{
+                ...landingRingStyle,
+                left: landing.visualPosition.left,
+                top: landing.visualPosition.top,
+                borderColor: getLandingZoneColor(landing.landingZone),
+              }}
+            ></div>
+
+            <div
+              style={{
+                ...landingLabelStyle,
+                left: landing.visualPosition.left,
+                top: `calc(${landing.visualPosition.top} - 34px)`,
+                background: getLandingZoneColor(landing.landingZone),
+              }}
+            >
+              {getLandingZoneLabel(landing.landingZone)}
+            </div>
+          </>
+        )}
+
+        <div style={teeBoxStyle}>TEE</div>
+
+        <div style={playerStyle}>
+          <div style={headStyle}></div>
+          <div style={bodyStyle}></div>
+          <div
+            style={{
+              ...clubStyle,
+              transform: isSwinging ? "rotate(-100deg)" : "rotate(-25deg)",
+            }}
+          ></div>
+        </div>
+
+        <div
+          style={{
+            ...ballStyle,
+            left: ballPosition.left,
+            top: ballPosition.top,
+          }}
+        ></div>
+
+        <div style={courseStatsOverlayStyle}>
+          <CourseStat
+            value={
+              holeData.par === 3
+                ? `${holeData.teeDistances?.[selectedTee] ?? "-"}`
+                : `${clubCarryMeters[club]}`
+            }
+            label={holeData.par === 3 ? "Meters" : "Carry"}
+          />
+          <CourseStat value="+6" label="Elev" />
+          <CourseStat
+            value={landing ? landing.landingZone : "Fairway"}
+            label="Lie"
+          />
+          <CourseStat
+            value={landing ? `${landing.actualLandingDistance}m` : "—"}
+            label="Landing"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConversationCard({
+  player,
+  holeData,
+  club,
+  target,
+  landing,
+  result,
+}: {
+  player: PlayerProfile | null;
+  holeData: HoleData;
+  club: ClubChoice;
+  target: TargetChoice;
+  landing: LandingResult | null;
+  result: ShotResult | null;
+}) {
+  return (
+    <div style={panelCardStyle}>
+      <div style={panelHeaderStyle}>
+        <div>
+          <span style={controlLabelStyle}>CONVERSATION / TRAINING</span>
+          <h3 style={panelTitleStyle}>Caddie–Player Dialogue</h3>
+        </div>
+      </div>
+
+      <ChatBubble
+        role="Caddie"
+        text={
+          player
+            ? getPlayerDialogue(player, holeData)
+            : "Saya menunggu briefing player."
+        }
+      />
+
+      <ChatBubble
+        role="You"
+        isOwn
+        text={`Saya rekomendasikan ${club} ke ${targetLabels[target]}. Saya pertimbangkan isi bag, hazard, dan target aman.`}
+      />
+
+      {landing && <ChatBubble role="Caddie" text={landing.caddieLine} />}
+
+      {result && (
+        <ChatBubble
+          role="Trainer"
+          text={`Coach feedback: ${result.mistakePattern}. ${result.recommendation}`}
+        />
+      )}
+
+      <div style={chatInputStyle}>
+        <span>Type your response...</span>
+        <button style={sendButtonStyle}>➤</button>
+      </div>
     </div>
   );
 }
@@ -489,6 +980,151 @@ function HazardMarker({
       {getHazardShortLabel(landmark.type)}
     </div>
   );
+}
+
+function InfoRow({
+  label,
+  value,
+  sideValue,
+}: {
+  label: string;
+  value: string;
+  sideValue?: string;
+}) {
+  return (
+    <div style={infoRowStyle}>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+
+      {sideValue && <small>{sideValue}</small>}
+    </div>
+  );
+}
+
+function CourseStat({ value, label }: { value: string; label: string }) {
+  return (
+    <div style={courseStatStyle}>
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function ChatBubble({
+  role,
+  text,
+  isOwn = false,
+}: {
+  role: string;
+  text: string;
+  isOwn?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        ...chatRowStyle,
+        justifyContent: isOwn ? "flex-end" : "flex-start",
+      }}
+    >
+      {!isOwn && <div style={chatAvatarStyle}>{role[0]}</div>}
+
+      <div
+        style={{
+          ...chatBubbleStyle,
+          ...(isOwn ? ownChatBubbleStyle : {}),
+        }}
+      >
+        <small>{role}</small>
+        <p>{text}</p>
+        <span>10:24 AM</span>
+      </div>
+    </div>
+  );
+}
+
+function DecisionReadout({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={decisionReadoutStyle}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function FeedbackCard({
+  title,
+  tone,
+  children,
+}: {
+  title: string;
+  tone: "cyan" | "blue" | "green" | "purple";
+  children: React.ReactNode;
+}) {
+  const styleMap: Record<typeof tone, CSSProperties> = {
+    cyan: {
+      background: "#ecfeff",
+      border: "1px solid #a5f3fc",
+    },
+    blue: {
+      background: "#eff6ff",
+      border: "1px solid #bfdbfe",
+    },
+    green: {
+      background: "#f0fdf4",
+      border: "1px solid #bbf7d0",
+    },
+    purple: {
+      background: "#faf5ff",
+      border: "1px solid #d8b4fe",
+    },
+  };
+
+  return (
+    <div style={{ ...feedbackCardStyle, ...styleMap[tone] }}>
+      <h3>{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={miniMetricStyle}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    function update() {
+      setIsMobile(window.innerWidth < 900);
+    }
+
+    update();
+    window.addEventListener("resize", update);
+
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  return isMobile;
+}
+
+function getPlayerDialogue(player: PlayerProfile, holeData: HoleData) {
+  if (player.playStyle === "aggressive") {
+    return `We're playing Hole ${holeData.hole}. I want a chance, but my weak point is ${player.weakness}. What's your plan off the tee?`;
+  }
+
+  if (player.playStyle === "conservative") {
+    return `I want to play this hole safely. Please help me choose the club and target with lower risk.`;
+  }
+
+  return `For Hole ${holeData.hole}, I need a balanced recommendation. Not too aggressive, but not too defensive.`;
 }
 
 function isClubAvailable(player: PlayerProfile, club: ClubChoice) {
@@ -527,45 +1163,41 @@ function getLandmarkPosition(
   index: number
 ): CSSProperties {
   const distance = landmark.distance ?? 100;
-  const normalizedTop = 84 - Math.min(distance, 250) * 0.24;
+  const normalizedTop = 88 - Math.min(distance, 260) * 0.26;
 
   const sideLeft: Record<string, string> = {
-    left: "29%",
-    center: "48%",
-    right: "66%",
+    left: "31%",
+    center: "50%",
+    right: "67%",
   };
 
   return {
     left: landmark.side
       ? sideLeft[landmark.side]
       : index % 2 === 0
-      ? "42%"
-      : "56%",
-    top: `${normalizedTop}%`,
+      ? "43%"
+      : "57%",
+    top: `${Math.max(normalizedTop, 12)}%`,
   };
 }
 
 function getHazardStyle(type: HazardType): CSSProperties {
   const base: CSSProperties = {
     position: "absolute",
-    width: 74,
-    height: 42,
-    borderRadius: "50%",
+    width: 58,
+    height: 30,
+    borderRadius: 999,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: 11,
-    fontWeight: 800,
-    zIndex: 6,
-    boxShadow: "0 6px 12px rgba(0,0,0,0.22)",
+    fontSize: 9,
+    fontWeight: 900,
+    zIndex: 8,
+    boxShadow: "0 6px 14px rgba(15,23,42,0.24)",
   };
 
   if (type === "bunker") {
-    return {
-      ...base,
-      background: "#fde68a",
-      color: "#92400e",
-    };
+    return { ...base, background: "#fde68a", color: "#92400e" };
   }
 
   if (type === "water") {
@@ -577,34 +1209,18 @@ function getHazardStyle(type: HazardType): CSSProperties {
   }
 
   if (type === "obi") {
-    return {
-      ...base,
-      background: "#111827",
-      color: "#fff",
-    };
+    return { ...base, background: "#111827", color: "#fff" };
   }
 
   if (type === "penalty") {
-    return {
-      ...base,
-      background: "#dc2626",
-      color: "#fff",
-    };
+    return { ...base, background: "#dc2626", color: "#fff" };
   }
 
   if (type === "dropZone") {
-    return {
-      ...base,
-      background: "#a78bfa",
-      color: "#fff",
-    };
+    return { ...base, background: "#a78bfa", color: "#fff" };
   }
 
-  return {
-    ...base,
-    background: "#e5e7eb",
-    color: "#111827",
-  };
+  return { ...base, background: "#e5e7eb", color: "#111827" };
 }
 
 function getHazardShortLabel(type: HazardType) {
@@ -620,49 +1236,6 @@ function getHazardShortLabel(type: HazardType) {
   };
 
   return labels[type];
-}
-
-function getBallTargetPosition(
-  target: TargetChoice,
-  greenData: GreenLayout | undefined
-) {
-  if (target === "layupFairway") {
-    return { left: "50%", top: "55%" };
-  }
-
-  if (target === "leftSide") {
-    return { left: "33%", top: "36%" };
-  }
-
-  if (target === "rightSide") {
-    return { left: "67%", top: "36%" };
-  }
-
-  if (target === "directPin" && greenData) {
-    return getPinCoursePosition(greenData.pinZone);
-  }
-
-  if (target === "safeAim" && greenData) {
-    return getPinCoursePosition(greenData.safeAimZone);
-  }
-
-  return { left: "50%", top: "30%" };
-}
-
-function getPinCoursePosition(zone: GreenPinZone) {
-  const positions: Record<GreenPinZone, { left: string; top: string }> = {
-    frontLeft: { left: "72%", top: "31%" },
-    frontCenter: { left: "78%", top: "31%" },
-    frontRight: { left: "84%", top: "31%" },
-    middleLeft: { left: "72%", top: "24%" },
-    middleCenter: { left: "78%", top: "24%" },
-    middleRight: { left: "84%", top: "24%" },
-    backLeft: { left: "72%", top: "17%" },
-    backCenter: { left: "78%", top: "17%" },
-    backRight: { left: "84%", top: "17%" },
-  };
-
-  return positions[zone];
 }
 
 function getPinDotPosition(zone: GreenPinZone): CSSProperties {
@@ -688,163 +1261,450 @@ function formatBoundary(holeData: HoleData) {
   return `Left: ${left.toUpperCase()} · Right: ${right.toUpperCase()}`;
 }
 
-const topControlStyle: CSSProperties = {
-  display: "flex",
-  gap: 16,
-  marginTop: 20,
-  marginBottom: 20,
-  flexWrap: "wrap",
-};
+function getLandingZoneColor(zone: LandingZoneType) {
+  const colors: Record<LandingZoneType, string> = {
+    green: "#16a34a",
+    fairway: "#2563eb",
+    bunker: "#d97706",
+    water: "#0284c7",
+    obi: "#111827",
+    penalty: "#dc2626",
+    rough: "#4d7c0f",
+    short: "#ca8a04",
+    long: "#9333ea",
+    layup: "#0f766e",
+  };
 
-const layoutStyle: CSSProperties = {
+  return colors[zone];
+}
+
+function getLandingZoneLabel(zone: LandingZoneType) {
+  const labels: Record<LandingZoneType, string> = {
+    green: "GREEN",
+    fairway: "FAIRWAY",
+    bunker: "BUNKER",
+    water: "WATER",
+    obi: "OBI",
+    penalty: "PENALTY",
+    rough: "ROUGH",
+    short: "SHORT",
+    long: "LONG",
+    layup: "LAYUP",
+  };
+
+  return labels[zone];
+}
+
+const pageStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 380px",
-  gap: 24,
+  gap: 16,
 };
 
-const gameAreaStyle: CSSProperties = {
-  background: "#fff",
-  padding: 20,
-  borderRadius: 16,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-};
-
-const courseStyle: CSSProperties = {
+const heroStyle: CSSProperties = {
   position: "relative",
-  height: 620,
   overflow: "hidden",
-  borderRadius: 24,
+  minHeight: 210,
+  borderRadius: 22,
+  padding: 28,
+  display: "grid",
+  gridTemplateColumns: "1.1fr 0.9fr",
+  gap: 20,
   background:
-    "linear-gradient(180deg, #86efac 0%, #4ade80 48%, #22c55e 100%)",
-  border: "6px solid #166534",
-};
-
-const roughTextureStyle: CSSProperties = {
-  position: "absolute",
-  inset: 0,
-  background:
-    "radial-gradient(circle at 20% 20%, rgba(22,101,52,0.18), transparent 12%), radial-gradient(circle at 80% 40%, rgba(22,101,52,0.16), transparent 10%), radial-gradient(circle at 35% 75%, rgba(22,101,52,0.16), transparent 11%)",
-  zIndex: 1,
-};
-
-const holeBadgeStyle: CSSProperties = {
-  position: "absolute",
-  top: 16,
-  left: 20,
-  zIndex: 20,
-  padding: "8px 14px",
-  borderRadius: 999,
-  background: "rgba(255,255,255,0.9)",
-  fontWeight: 800,
-};
-
-const boundaryStyle: CSSProperties = {
-  position: "absolute",
-  top: "42%",
-  zIndex: 20,
-  writingMode: "vertical-rl",
-  padding: "10px 6px",
-  borderRadius: 999,
-  background: "#991b1b",
+    "linear-gradient(135deg, #06142f 0%, #0b2a63 52%, #1d4ed8 100%)",
   color: "#fff",
-  fontSize: 11,
-  fontWeight: 800,
-  letterSpacing: 1,
+  boxShadow: "0 18px 40px rgba(15,23,42,0.18)",
 };
 
-const fairwayStyle: CSSProperties = {
-  position: "absolute",
-  left: "32%",
-  top: "14%",
-  width: "35%",
-  height: "74%",
-  borderRadius: "50% 45% 40% 55%",
-  background:
-    "linear-gradient(180deg, rgba(187,247,208,0.95), rgba(34,197,94,0.9))",
-  boxShadow: "inset 0 0 28px rgba(22,101,52,0.28)",
+const heroContentStyle: CSSProperties = {
+  position: "relative",
   zIndex: 2,
 };
 
-const greenStyle: CSSProperties = {
-  position: "absolute",
-  right: "11%",
-  top: "9%",
-  width: 170,
-  height: 120,
-  borderRadius: "52% 48% 45% 55%",
-  background: "#bbf7d0",
-  border: "4px solid #16a34a",
-  boxShadow: "0 10px 24px rgba(0,0,0,0.2)",
-  zIndex: 10,
+const moduleLabelStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: 1,
+  textTransform: "uppercase",
+  color: "#bfdbfe",
 };
 
-const flagIconStyle: CSSProperties = {
-  position: "absolute",
-  left: "46%",
-  top: "24%",
-  fontSize: 36,
-  color: "#dc2626",
+const heroTitleStyle: CSSProperties = {
+  margin: "12px 0 10px",
+  fontSize: 40,
+  lineHeight: 1.05,
 };
 
-const pinDotStyle: CSSProperties = {
+const heroTextStyle: CSSProperties = {
+  maxWidth: 560,
+  margin: 0,
+  color: "#dbeafe",
+  lineHeight: 1.6,
+};
+
+const heroActionRowStyle: CSSProperties = {
+  display: "flex",
+  gap: 20,
+  marginTop: 22,
+  flexWrap: "wrap",
+  fontWeight: 800,
+};
+
+const heroRightStyle: CSSProperties = {
+  position: "relative",
+  minHeight: 150,
+};
+
+const practiceBadgeStyle: CSSProperties = {
   position: "absolute",
-  width: 12,
-  height: 12,
+  top: 0,
+  right: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "9px 13px",
+  borderRadius: 12,
+  background: "rgba(2,6,23,0.72)",
+  fontSize: 12,
+  fontWeight: 900,
+  zIndex: 3,
+};
+
+const greenDotStyle: CSSProperties = {
+  width: 8,
+  height: 8,
   borderRadius: "50%",
-  background: "#111827",
-  border: "2px solid #fff",
-  zIndex: 14,
+  background: "#22c55e",
+};
+
+const sessionTextStyle: CSSProperties = {
+  position: "absolute",
+  top: 48,
+  right: 4,
+  color: "#dbeafe",
+  fontWeight: 800,
+  fontSize: 13,
+};
+
+const heroSilhouetteStyle: CSSProperties = {
+  position: "absolute",
+  right: 30,
+  bottom: -12,
+  width: 210,
+  height: 150,
+  opacity: 0.9,
+};
+
+const personOneStyle: CSSProperties = {
+  position: "absolute",
+  left: 40,
+  bottom: 14,
+  width: 28,
+  height: 92,
+  borderRadius: "18px 18px 8px 8px",
+  background: "#020617",
+};
+
+const personTwoStyle: CSSProperties = {
+  position: "absolute",
+  left: 90,
+  bottom: 8,
+  width: 24,
+  height: 72,
+  borderRadius: "18px 18px 8px 8px",
+  background: "#020617",
+};
+
+const bagStyle: CSSProperties = {
+  position: "absolute",
+  left: 126,
+  bottom: 8,
+  width: 34,
+  height: 82,
+  borderRadius: 12,
+  background: "#020617",
+  transform: "rotate(-12deg)",
+};
+
+const controlGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: 12,
+};
+
+const controlCardStyle: CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  padding: 14,
+  boxShadow: "0 1px 4px rgba(15,23,42,0.06)",
+};
+
+const controlHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 10,
+};
+
+const controlIconStyle: CSSProperties = {
+  width: 22,
+  height: 22,
+  borderRadius: 8,
+  background: "#eff6ff",
+  color: "#2563eb",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const controlLabelStyle: CSSProperties = {
+  color: "#475569",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: 0.6,
+  textTransform: "uppercase",
+};
+
+const controlContentStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+};
+
+const cleanSelectStyle: CSSProperties = {
+  width: "100%",
+  border: "1px solid #e2e8f0",
+  borderRadius: 12,
+  padding: 12,
+  background: "#fff",
+  color: "#0f172a",
+  fontWeight: 800,
+};
+
+const shuffleButtonStyle: CSSProperties = {
+  width: 42,
+  height: 42,
+  border: "none",
+  borderRadius: 12,
+  background: "#1d4ed8",
+  color: "#fff",
+  fontSize: 18,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const middleGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1.1fr 1fr",
+  gap: 12,
+  alignItems: "stretch",
+};
+
+const mobileMiddleGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 12,
+};
+
+const panelCardStyle: CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 18,
+  padding: 16,
+  boxShadow: "0 1px 4px rgba(15,23,42,0.06)",
+};
+
+const panelHeaderStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "flex-start",
+  marginBottom: 14,
+};
+
+const panelTitleStyle: CSSProperties = {
+  margin: "5px 0 0",
+  fontSize: 17,
+};
+
+const activeBadgeStyle: CSSProperties = {
+  padding: "5px 9px",
+  borderRadius: 999,
+  background: "#eff6ff",
+  color: "#2563eb",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const infoRowStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "10px 0",
+  borderTop: "1px solid #f1f5f9",
+};
+
+const adviceBoxStyle: CSSProperties = {
+  marginTop: 10,
+  padding: 12,
+  borderRadius: 12,
+  background: "#f0fdf4",
+  border: "1px solid #bbf7d0",
+  lineHeight: 1.5,
+};
+
+const windBadgeStyle: CSSProperties = {
+  padding: "7px 10px",
+  borderRadius: 10,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  color: "#0f172a",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const courseViewStyle: CSSProperties = {
+  position: "relative",
+  overflow: "hidden",
+  borderRadius: 16,
+  background: "#14532d",
+};
+
+const courseSkyStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  background:
+    "linear-gradient(180deg, #7dd3fc 0%, #bae6fd 28%, #166534 29%, #14532d 100%)",
+};
+
+const courseTreeLeftStyle: CSSProperties = {
+  position: "absolute",
+  left: -30,
+  top: "30%",
+  width: "38%",
+  height: "62%",
+  borderRadius: "50%",
+  background: "#052e16",
+  opacity: 0.92,
+};
+
+const courseTreeRightStyle: CSSProperties = {
+  position: "absolute",
+  right: -26,
+  top: "28%",
+  width: "40%",
+  height: "64%",
+  borderRadius: "50%",
+  background: "#052e16",
+  opacity: 0.92,
+};
+
+const courseFairwayStyle: CSSProperties = {
+  position: "absolute",
+  left: "30%",
+  top: "30%",
+  width: "40%",
+  height: "66%",
+  borderRadius: "50% 50% 20% 20%",
+  background:
+    "repeating-linear-gradient(180deg, #bbf7d0 0px, #bbf7d0 22px, #86efac 22px, #86efac 44px)",
+  boxShadow: "inset 0 0 22px rgba(22,101,52,0.45)",
+};
+
+const courseGreenStyle: CSSProperties = {
+  position: "absolute",
+  left: "39%",
+  top: "18%",
+  width: 90,
+  height: 58,
+  borderRadius: "50%",
+  background: "#dcfce7",
+  border: "3px solid #16a34a",
+  zIndex: 6,
+};
+
+const coursePinStyle: CSSProperties = {
+  position: "absolute",
+  width: 10,
+  height: 10,
+  borderRadius: "50%",
+  background: "#dc2626",
+  zIndex: 12,
+};
+
+const courseStatsOverlayStyle: CSSProperties = {
+  position: "absolute",
+  left: 12,
+  right: 12,
+  bottom: 12,
+  display: "grid",
+  gridTemplateColumns: "repeat(4, 1fr)",
+  background: "rgba(2,6,23,0.82)",
+  color: "#fff",
+  borderRadius: 14,
+  overflow: "hidden",
+  zIndex: 20,
+};
+
+const courseStatStyle: CSSProperties = {
+  padding: "10px 8px",
+  display: "grid",
+  gap: 2,
+  textAlign: "center",
+  borderRight: "1px solid rgba(255,255,255,0.12)",
 };
 
 const teeBoxStyle: CSSProperties = {
   position: "absolute",
-  left: "43%",
-  bottom: "6%",
-  width: 90,
-  height: 46,
+  left: "42%",
+  bottom: "7%",
+  width: 70,
+  height: 34,
   borderRadius: 12,
-  background: "#65a30d",
-  border: "3px solid #365314",
+  background: "#365314",
+  border: "2px solid #bef264",
   color: "#fff",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontWeight: 800,
-  zIndex: 8,
+  fontSize: 11,
+  fontWeight: 900,
+  zIndex: 10,
 };
 
 const playerStyle: CSSProperties = {
   position: "absolute",
   left: "45%",
-  top: "78%",
-  width: 54,
-  height: 100,
-  zIndex: 15,
+  top: "76%",
+  width: 48,
+  height: 90,
+  zIndex: 13,
 };
 
 const headStyle: CSSProperties = {
-  width: 24,
-  height: 24,
+  width: 20,
+  height: 20,
   borderRadius: "50%",
   background: "#facc15",
-  marginLeft: 14,
+  marginLeft: 12,
 };
 
 const bodyStyle: CSSProperties = {
-  width: 26,
-  height: 48,
+  width: 23,
+  height: 42,
   background: "#1e3a8a",
   borderRadius: 8,
-  marginLeft: 13,
+  marginLeft: 11,
   marginTop: 3,
 };
 
 const clubStyle: CSSProperties = {
   position: "absolute",
-  left: 38,
-  top: 26,
-  width: 4,
-  height: 78,
+  left: 34,
+  top: 24,
+  width: 3,
+  height: 68,
   background: "#111827",
   transformOrigin: "top center",
   transition: "transform 0.25s ease-in-out",
@@ -852,84 +1712,194 @@ const clubStyle: CSSProperties = {
 
 const ballStyle: CSSProperties = {
   position: "absolute",
-  width: 14,
-  height: 14,
+  width: 12,
+  height: 12,
   borderRadius: "50%",
   background: "#fff",
   border: "2px solid #e5e7eb",
   boxShadow: "0 4px 10px rgba(0,0,0,0.35)",
+  transform: "translate(-50%, -50%)",
   transition: "left 1s ease-out, top 1s ease-out",
   zIndex: 30,
 };
 
-const panelStyle: CSSProperties = {
-  background: "#fff",
-  padding: 20,
-  borderRadius: 16,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-  height: "fit-content",
+const shotTrailStyle: CSSProperties = {
+  position: "absolute",
+  left: "50%",
+  width: 3,
+  transform: "translateX(-50%)",
+  background:
+    "linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.1))",
+  borderRadius: 999,
+  zIndex: 22,
 };
 
-const infoSectionStyle: CSSProperties = {
-  marginTop: 18,
-  paddingTop: 12,
-  borderTop: "1px solid #e5e7eb",
+const landingRingStyle: CSSProperties = {
+  position: "absolute",
+  width: 42,
+  height: 42,
+  borderRadius: "50%",
+  border: "4px solid",
+  transform: "translate(-50%, -50%)",
+  background: "rgba(255,255,255,0.22)",
+  zIndex: 24,
 };
 
-const fieldStyle: CSSProperties = {
-  marginTop: 14,
-};
-
-const labelStyle: CSSProperties = {
-  display: "block",
-  fontWeight: 700,
-  marginBottom: 8,
-};
-
-const selectStyle: CSSProperties = {
-  minWidth: 180,
-  width: "100%",
-  padding: 12,
-  borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-};
-
-const primaryButtonStyle: CSSProperties = {
-  width: "100%",
-  marginTop: 20,
-  padding: "12px 14px",
-  borderRadius: 10,
-  border: "none",
-  background: "#2563eb",
+const landingLabelStyle: CSSProperties = {
+  position: "absolute",
+  transform: "translateX(-50%)",
+  padding: "5px 9px",
+  borderRadius: 999,
   color: "#fff",
-  fontWeight: 800,
+  fontSize: 10,
+  fontWeight: 900,
+  zIndex: 25,
+  whiteSpace: "nowrap",
 };
 
-const secondaryButtonStyle: CSSProperties = {
-  width: "100%",
-  marginTop: 10,
-  padding: "12px 14px",
-  borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-  color: "#0f172a",
-  fontWeight: 800,
-  cursor: "pointer",
+const chatRowStyle: CSSProperties = {
+  display: "flex",
+  gap: 10,
+  marginTop: 12,
 };
 
-const resultBoxStyle: CSSProperties = {
-  marginTop: 20,
+const chatAvatarStyle: CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: "50%",
+  background: "#0f172a",
+  color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontWeight: 900,
+  flexShrink: 0,
+};
+
+const chatBubbleStyle: CSSProperties = {
+  maxWidth: "82%",
+  padding: 12,
+  borderRadius: 14,
+  background: "#f8fafc",
+  border: "1px solid #e5e7eb",
+  lineHeight: 1.45,
+};
+
+const ownChatBubbleStyle: CSSProperties = {
   background: "#eff6ff",
-  padding: 16,
-  borderRadius: 12,
   border: "1px solid #bfdbfe",
 };
 
-const warningBoxStyle: CSSProperties = {
-  marginTop: 8,
+const chatInputStyle: CSSProperties = {
+  marginTop: 16,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
   padding: 10,
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  color: "#94a3b8",
+};
+
+const sendButtonStyle: CSSProperties = {
+  width: 36,
+  height: 36,
   borderRadius: 10,
+  border: "none",
+  background: "#1d4ed8",
+  color: "#fff",
+  cursor: "pointer",
+};
+
+const decisionSectionStyle: CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 18,
+  padding: 16,
+  boxShadow: "0 1px 4px rgba(15,23,42,0.06)",
+};
+
+const compactDecisionSectionStyle: CSSProperties = {
+  background: "transparent",
+  border: "none",
+  padding: 0,
+};
+
+const decisionHeaderStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "center",
+  marginBottom: 14,
+};
+
+const decisionTitleStyle: CSSProperties = {
+  margin: "4px 0 0",
+  fontSize: 17,
+};
+
+const scoringImpactStyle: CSSProperties = {
+  color: "#475569",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const clubOptionGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: 10,
+};
+
+const compactClubOptionGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: 8,
+};
+
+const clubOptionStyle: CSSProperties = {
+  minHeight: 64,
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: 11,
+  borderRadius: 14,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  cursor: "pointer",
+  position: "relative",
+};
+
+const selectedClubOptionStyle: CSSProperties = {
+  borderColor: "#2563eb",
+  background: "#eff6ff",
+  boxShadow: "0 0 0 2px rgba(37,99,235,0.12)",
+};
+
+const clubIconStyle: CSSProperties = {
+  fontSize: 21,
+};
+
+const checkCircleStyle: CSSProperties = {
+  position: "absolute",
+  top: 8,
+  right: 8,
+  width: 20,
+  height: 20,
+  borderRadius: "50%",
+  background: "#2563eb",
+  color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const warningBoxStyle: CSSProperties = {
+  marginTop: 12,
+  padding: 12,
+  borderRadius: 12,
   background: "#fef2f2",
   color: "#991b1b",
   border: "1px solid #fecaca",
@@ -937,23 +1907,161 @@ const warningBoxStyle: CSSProperties = {
   lineHeight: 1.5,
 };
 
-const clubBagBoxStyle: CSSProperties = {
+const decisionBottomGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr 1fr 220px",
+  gap: 12,
+  marginTop: 14,
+  alignItems: "end",
+};
+
+const compactDecisionBottomGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 10,
   marginTop: 12,
 };
 
-const clubBagListStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 8,
-  marginTop: 8,
+const decisionInputGroupStyle: CSSProperties = {
+  display: "grid",
+  gap: 6,
 };
 
-const clubChipStyle: CSSProperties = {
-  padding: "6px 10px",
+const decisionSelectStyle: CSSProperties = {
+  width: "100%",
+  border: "none",
+  background: "#f8fafc",
+  borderRadius: 12,
+  padding: 12,
+  fontWeight: 800,
+};
+
+const decisionReadoutStyle: CSSProperties = {
+  display: "grid",
+  gap: 5,
+  padding: 12,
+  borderRadius: 12,
+  background: "#f8fafc",
+};
+
+const decisionButtonAreaStyle: CSSProperties = {
+  display: "grid",
+  gap: 8,
+};
+
+const submitButtonStyle: CSSProperties = {
+  width: "100%",
+  padding: 13,
+  borderRadius: 12,
+  border: "none",
+  background: "#1d4ed8",
+  color: "#fff",
+  fontWeight: 900,
+};
+
+const resetButtonStyle: CSSProperties = {
+  width: "100%",
+  padding: 11,
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  color: "#0f172a",
+  fontWeight: 900,
+};
+
+const saveButtonStyle: CSSProperties = {
+  width: "100%",
+  padding: 12,
+  borderRadius: 12,
+  border: "none",
+  background: "#16a34a",
+  color: "#fff",
+  fontWeight: 900,
+};
+
+const mobileFloatingButtonStyle: CSSProperties = {
+  position: "fixed",
+  left: 14,
+  right: 14,
+  bottom: 92,
+  zIndex: 90,
+  padding: 14,
+  borderRadius: 18,
+  border: "none",
+  background: "#1d4ed8",
+  color: "#fff",
+  fontWeight: 900,
+  boxShadow: "0 18px 42px rgba(37,99,235,0.32)",
+};
+
+const mobileSheetStyle: CSSProperties = {
+  position: "fixed",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 95,
+  maxHeight: "72vh",
+  overflowY: "auto",
+  padding: "10px 14px 96px",
+  borderRadius: "26px 26px 0 0",
+  background: "rgba(255,255,255,0.98)",
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 -18px 44px rgba(15,23,42,0.22)",
+};
+
+const sheetHandleStyle: CSSProperties = {
+  width: 48,
+  height: 5,
   borderRadius: 999,
-  background: "#eff6ff",
-  color: "#1d4ed8",
-  border: "1px solid #bfdbfe",
-  fontSize: 12,
-  fontWeight: 700,
+  background: "#cbd5e1",
+  margin: "0 auto 12px",
+};
+
+const mobileSheetHeaderStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  marginBottom: 12,
+};
+
+const mobileSheetTitleStyle: CSSProperties = {
+  margin: "4px 0 0",
+  fontSize: 18,
+};
+
+const closeSheetButtonStyle: CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: "50%",
+  border: "none",
+  background: "#f1f5f9",
+  color: "#64748b",
+  fontSize: 22,
+  cursor: "pointer",
+};
+
+const feedbackGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 12,
+};
+
+const feedbackCardStyle: CSSProperties = {
+  padding: 16,
+  borderRadius: 16,
+};
+
+const resultMiniGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, 1fr)",
+  gap: 8,
+};
+
+const miniMetricStyle: CSSProperties = {
+  padding: 10,
+  borderRadius: 12,
+  background: "#fff",
+  display: "grid",
+  gap: 4,
 };
