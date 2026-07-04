@@ -42,6 +42,8 @@ export type GreenLayout = {
   greenShape: "round" | "oval" | "wide" | "narrow" | "angled" | "split";
   approachType: "open" | "guarded" | "narrow" | "elevated" | "riskReward";
   safeMiss: GreenZone;
+  safeAimZone?: GreenZone | GreenPinZone;
+  pinZone?: GreenPinZone;
   dangerousMiss: GreenZone[];
   hazards: GreenHazard[];
   pinZones: PinZone[];
@@ -962,12 +964,39 @@ export function getGreenLayoutByHole(holeNumber: number) {
   return greenDataByHole[holeNumber] ?? greenData[0];
 }
 
-export function formatPinZone(pinZone?: GreenPinZone | null) {
+export function formatPinZone(pinZone?: GreenPinZone | GreenZone | null) {
   if (!pinZone) {
     return "Pin position belum dipilih";
   }
 
+  if (typeof pinZone === "string") {
+    return formatGreenZone(pinZone);
+  }
+
   return `${pinZone.label} · ${pinZone.difficulty}`;
+}
+
+export function formatGreenZone(zone?: GreenZone | null) {
+  if (!zone) {
+    return "Zona belum dipilih";
+  }
+
+  const labels: Record<GreenZone, string> = {
+    front: "Front",
+    middle: "Middle",
+    back: "Back",
+    left: "Left",
+    right: "Right",
+    center: "Center",
+    frontLeft: "Front Left",
+    frontRight: "Front Right",
+    backLeft: "Back Left",
+    backRight: "Back Right",
+    aroundGreen: "Around Green",
+    approach: "Approach",
+  };
+
+  return labels[zone] ?? zone;
 }
 
 export function getGreenStrategyAdvice(
