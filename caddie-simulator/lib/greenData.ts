@@ -1,349 +1,957 @@
-export type GreenPinZone =
-  | "frontLeft"
-  | "frontCenter"
-  | "frontRight"
-  | "middleLeft"
-  | "middleCenter"
-  | "middleRight"
-  | "backLeft"
-  | "backCenter"
-  | "backRight";
-
-export type GreenShape =
-  | "oval"
-  | "round"
-  | "wide"
-  | "narrow"
-  | "long"
-  | "kidney"
-  | "irregular";
-
 export type GreenHazardType =
   | "bunker"
   | "water"
-  | "slope"
+  | "penalty"
   | "rough"
+  | "obi"
   | "dropZone"
-  | "other";
+  | "tree";
 
-export type GreenHazardZone =
-  | GreenPinZone
+export type GreenZone =
   | "front"
+  | "middle"
   | "back"
   | "left"
   | "right"
-  | "around";
+  | "center"
+  | "frontLeft"
+  | "frontRight"
+  | "backLeft"
+  | "backRight"
+  | "aroundGreen"
+  | "approach";
 
 export type GreenHazard = {
   type: GreenHazardType;
-  zone: GreenHazardZone;
+  zone: GreenZone;
   label: string;
+  note: string;
+};
+
+export type PinZone = {
+  zone: GreenZone;
+  label: string;
+  difficulty: "easy" | "medium" | "hard";
+  advice: string;
 };
 
 export type GreenLayout = {
-  hole: number;
-  shape: GreenShape;
-  pinZone: GreenPinZone;
-  safeAimZone: GreenPinZone;
-  protectedZones: GreenPinZone[];
+  holeNumber: number;
+  greenShape: "round" | "oval" | "wide" | "narrow" | "angled" | "split";
+  approachType: "open" | "guarded" | "narrow" | "elevated" | "riskReward";
+  safeMiss: GreenZone;
+  dangerousMiss: GreenZone[];
   hazards: GreenHazard[];
+  pinZones: PinZone[];
   approachNote: string;
-  verificationStatus: "draft" | "verified";
+  caddieFocus: string;
 };
 
 export const greenData: GreenLayout[] = [
   {
-    hole: 1,
-    shape: "oval",
-    pinZone: "middleCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "frontRight"],
+    holeNumber: 1,
+    greenShape: "oval",
+    approachType: "guarded",
+    safeMiss: "center",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "left", label: "Green-side bunker left" },
-      { type: "bunker", zone: "right", label: "Green-side bunker right" },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Bunker kiri area approach",
+        note: "Jangan terlalu agresif ke kiri saat approach.",
+      },
+      {
+        type: "bunker",
+        zone: "right",
+        label: "Bunker kanan area approach",
+        note: "Target aman lebih baik ke tengah green.",
+      },
+      {
+        type: "obi",
+        zone: "left",
+        label: "OB kiri",
+        note: "Miss kiri harus dihindari.",
+      },
+      {
+        type: "obi",
+        zone: "right",
+        label: "OB kanan",
+        note: "Miss kanan juga berisiko tinggi.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Gunakan club cukup, jangan terlalu pendek.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "easy",
+        advice: "Target tengah green adalah pilihan paling aman.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "hard",
+        advice: "Hindari over green jika player kurang kontrol jarak.",
+      },
     ],
     approachNote:
-      "Use center green as default safe target. Avoid attacking pin if bunker side is active.",
-    verificationStatus: "draft",
+      "Hole 1 menuntut caddie menjaga arah rekomendasi tetap aman karena ada risiko kanan dan kiri.",
+    caddieFocus: "Target aman, hindari miss kanan-kiri, dan prioritaskan center green.",
   },
   {
-    hole: 2,
-    shape: "long",
-    pinZone: "middleRight",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "middleRight"],
+    holeNumber: 2,
+    greenShape: "oval",
+    approachType: "guarded",
+    safeMiss: "center",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "left", label: "Left bunker near green" },
-      { type: "bunker", zone: "right", label: "Right bunker near green" },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Bunker kiri",
+        note: "Area kiri perlu dihindari jika pin kiri.",
+      },
+      {
+        type: "bunker",
+        zone: "right",
+        label: "Bunker kanan",
+        note: "Jangan memaksa target kanan jika player tidak akurat.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Pastikan carry cukup untuk masuk green.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "easy",
+        advice: "Target tengah aman untuk mayoritas player.",
+      },
+      {
+        zone: "backRight",
+        label: "Pin belakang kanan",
+        difficulty: "hard",
+        advice: "Jangan attack pin jika miss kanan mengarah bunker.",
+      },
     ],
     approachNote:
-      "If pin is right, safer recommendation is middle green unless player has strong distance control.",
-    verificationStatus: "draft",
+      "Hole 2 bagus untuk melatih keputusan target antara attack pin dan center green.",
+    caddieFocus: "Baca posisi bunker sebelum memberi rekomendasi target.",
   },
   {
-    hole: 3,
-    shape: "irregular",
-    pinZone: "backCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "frontRight"],
+    holeNumber: 3,
+    greenShape: "wide",
+    approachType: "riskReward",
+    safeMiss: "front",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "frontLeft", label: "Front-left bunker" },
-      { type: "bunker", zone: "frontRight", label: "Front-right bunker" },
+      {
+        type: "water",
+        zone: "approach",
+        label: "Area air sebelum fairway/approach",
+        note: "Pastikan rekomendasi tidak memaksa carry berisiko.",
+      },
+      {
+        type: "bunker",
+        zone: "center",
+        label: "Bunker tengah dekat green",
+        note: "Layup atau target aman bisa lebih baik untuk player high handicap.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Jangan pendek jika ada hazard sebelum green.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "medium",
+        advice: "Target tengah aman setelah posisi bola sudah bagus.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "hard",
+        advice: "Gunakan club cukup, tapi jangan over-aggressive.",
+      },
     ],
     approachNote:
-      "Long par 5 approach. Prioritize safe landing zone before attacking back pin.",
-    verificationStatus: "draft",
+      "Par 5 ini menuntut caddie mengatur strategi bertahap, bukan hanya mengejar jarak maksimal.",
+    caddieFocus: "Course management, layup decision, dan membaca risiko carry.",
   },
   {
-    hole: 4,
-    shape: "long",
-    pinZone: "middleCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "frontRight", "backLeft"],
+    holeNumber: 4,
+    greenShape: "round",
+    approachType: "guarded",
+    safeMiss: "center",
+    dangerousMiss: ["left", "right", "back"],
     hazards: [
-      { type: "bunker", zone: "frontLeft", label: "Front-left bunker" },
-      { type: "bunker", zone: "frontRight", label: "Front-right bunker" },
-      { type: "bunker", zone: "backLeft", label: "Back-left bunker" },
+      {
+        type: "rough",
+        zone: "aroundGreen",
+        label: "Rough sekitar green",
+        note: "Miss kecil masih bisa dimainkan, tapi arah tetap perlu aman.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Pilih club yang tidak terlalu pendek.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "easy",
+        advice: "Target center green.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "hard",
+        advice: "Jangan over green.",
+      },
     ],
     approachNote:
-      "Par 3. Club selection must match tee distance. Center green is safer than attacking protected edges.",
-    verificationStatus: "draft",
+      "Par 3. Fokus utama adalah pemilihan club sesuai tee distance dan kemampuan player.",
+    caddieFocus: "Club selection berdasarkan jarak tee dan kontrol carry.",
   },
   {
-    hole: 5,
-    shape: "long",
-    pinZone: "middleRight",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "middleLeft"],
+    holeNumber: 5,
+    greenShape: "oval",
+    approachType: "guarded",
+    safeMiss: "center",
+    dangerousMiss: ["left"],
     hazards: [
-      { type: "bunker", zone: "frontLeft", label: "Left bunker near approach" },
-      { type: "bunker", zone: "middleLeft", label: "Left-side green bunker" },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Bunker kiri",
+        note: "Hindari miss kiri saat approach.",
+      },
+      {
+        type: "rough",
+        zone: "right",
+        label: "Area kanan relatif lebih aman",
+        note: "Safe miss bisa diarahkan sedikit kanan jika pin kiri.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "frontLeft",
+        label: "Pin depan kiri",
+        difficulty: "hard",
+        advice: "Jangan attack langsung jika bunker kiri aktif.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "easy",
+        advice: "Target tengah green.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "medium",
+        advice: "Perhatikan club agar tidak over.",
+      },
     ],
     approachNote:
-      "Avoid missing left. If pin is right, aim center-right rather than direct flag attack.",
-    verificationStatus: "draft",
+      "Hole 5 menuntut caddie menjaga player tidak terpancing ke sisi bunker.",
+    caddieFocus: "Safe target dan kontrol arah approach.",
   },
   {
-    hole: 6,
-    shape: "kidney",
-    pinZone: "middleCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "frontRight"],
+    holeNumber: 6,
+    greenShape: "narrow",
+    approachType: "narrow",
+    safeMiss: "front",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "frontLeft", label: "Front-left bunker" },
-      { type: "bunker", zone: "frontRight", label: "Front-right bunker" },
-      { type: "rough", zone: "around", label: "Tree-lined green complex" },
+      {
+        type: "bunker",
+        zone: "right",
+        label: "Bunker kanan",
+        note: "Hindari target kanan jika akurasi player rendah.",
+      },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Bunker kiri",
+        note: "Miss kiri juga tidak aman.",
+      },
+      {
+        type: "obi",
+        zone: "left",
+        label: "OB kiri",
+        note: "Jangan memilih target yang membuka risiko kiri.",
+      },
+      {
+        type: "obi",
+        zone: "right",
+        label: "OB kanan",
+        note: "Rekomendasi terlalu agresif bisa mahal.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Lebih baik short aman daripada miss kanan-kiri.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "medium",
+        advice: "Target center dengan club terkendali.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "hard",
+        advice: "Jangan mengejar pin jika line sempit.",
+      },
     ],
     approachNote:
-      "OBI pressure on the hole makes center green recommendation more valuable.",
-    verificationStatus: "draft",
+      "Hole 6 berisiko karena kanan-kiri bisa menjadi masalah besar.",
+    caddieFocus: "Minimalkan risiko lateral dan pilih target konservatif.",
   },
   {
-    hole: 7,
-    shape: "long",
-    pinZone: "backCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "frontRight"],
+    holeNumber: 7,
+    greenShape: "round",
+    approachType: "guarded",
+    safeMiss: "front",
+    dangerousMiss: ["back", "left", "right"],
     hazards: [
-      { type: "bunker", zone: "frontLeft", label: "Front-left bunker" },
-      { type: "dropZone", zone: "front", label: "Drop zone around 70m" },
+      {
+        type: "dropZone",
+        zone: "front",
+        label: "Drop zone depan tee ladies",
+        note: "Digunakan saat skenario penalty/hazard aktif.",
+      },
+      {
+        type: "rough",
+        zone: "aroundGreen",
+        label: "Rough sekitar green",
+        note: "Miss sekitar green masih bisa recovery.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Pilih club yang carry sampai depan green.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "easy",
+        advice: "Target tengah green.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "hard",
+        advice: "Jangan over green jika distance control kurang.",
+      },
     ],
     approachNote:
-      "Par 3. If pin is back, avoid under-clubbing. Middle green is still the safest target.",
-    verificationStatus: "draft",
+      "Par 3 dengan variasi tee distance. Caddie harus membaca jarak dengan disiplin.",
+    caddieFocus: "Club selection, tee distance, dan safe miss.",
   },
   {
-    hole: 8,
-    shape: "long",
-    pinZone: "middleLeft",
-    safeAimZone: "middleCenter",
-    protectedZones: ["middleLeft", "frontLeft"],
+    holeNumber: 8,
+    greenShape: "wide",
+    approachType: "riskReward",
+    safeMiss: "center",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "left", label: "Left bunker complex" },
-      { type: "rough", zone: "right", label: "Right-side miss area" },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Rangkaian bunker kiri",
+        note: "Jangan biarkan player terlalu agresif ke kiri.",
+      },
+      {
+        type: "penalty",
+        zone: "right",
+        label: "Penalty area kanan",
+        note: "Miss kanan berbahaya dan harus dihindari.",
+      },
+      {
+        type: "obi",
+        zone: "left",
+        label: "OB kiri",
+        note: "Miss kiri juga berisiko.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Layup bisa menjadi pilihan jika angle belum bagus.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "medium",
+        advice: "Target tengah setelah posisi bola aman.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "hard",
+        advice: "Jangan mengejar jarak maksimal tanpa angle.",
+      },
     ],
     approachNote:
-      "Par 5 green. If pin is left, do not attack directly when left bunker is in play.",
-    verificationStatus: "draft",
+      "Par 5 dengan kombinasi bunker, OB, dan penalty. Strategi bertahap lebih aman.",
+    caddieFocus: "Risk management, layup, dan arah aman.",
   },
   {
-    hole: 9,
-    shape: "oval",
-    pinZone: "middleCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "frontRight"],
+    holeNumber: 9,
+    greenShape: "angled",
+    approachType: "guarded",
+    safeMiss: "center",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "frontLeft", label: "Front-left bunker" },
-      { type: "bunker", zone: "frontRight", label: "Front-right bunker" },
-      { type: "bunker", zone: "middleRight", label: "Right bunker" },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Bunker kiri",
+        note: "Miss kiri dekat green perlu dihindari.",
+      },
+      {
+        type: "bunker",
+        zone: "center",
+        label: "Bunker tengah",
+        note: "Target langsung ke area bunker berisiko.",
+      },
+      {
+        type: "bunker",
+        zone: "right",
+        label: "Bunker kanan",
+        note: "Hindari miss kanan jika pin kanan.",
+      },
+      {
+        type: "penalty",
+        zone: "left",
+        label: "Penalty/ilalang area",
+        note: "Area penalty harus jadi pertimbangan sebelum attack.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Pastikan carry cukup dan target tidak masuk bunker tengah.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "medium",
+        advice: "Target tengah relatif lebih aman.",
+      },
+      {
+        zone: "backRight",
+        label: "Pin belakang kanan",
+        difficulty: "hard",
+        advice: "Jangan memaksa jika miss kanan membawa bunker.",
+      },
     ],
     approachNote:
-      "Bunker pressure around green. Center green is preferred unless player has high control.",
-    verificationStatus: "draft",
+      "Hole 9 menguji kemampuan caddie membaca bunker tengah dan area penalty.",
+    caddieFocus: "Target selection dan hazard awareness.",
   },
   {
-    hole: 10,
-    shape: "oval",
-    pinZone: "frontCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "frontRight"],
+    holeNumber: 10,
+    greenShape: "wide",
+    approachType: "riskReward",
+    safeMiss: "center",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "frontLeft", label: "Front-left bunker" },
-      { type: "bunker", zone: "frontRight", label: "Front-right bunker" },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Bunker kiri dekat green",
+        note: "Hindari miss kiri saat approach.",
+      },
+      {
+        type: "bunker",
+        zone: "right",
+        label: "Bunker kanan",
+        note: "Miss kanan dapat membuka risiko recovery sulit.",
+      },
+      {
+        type: "obi",
+        zone: "left",
+        label: "OB kiri",
+        note: "Jangan terlalu membuka arah ke kiri.",
+      },
+      {
+        type: "obi",
+        zone: "right",
+        label: "OB kanan over bunker",
+        note: "Over kanan sangat berisiko.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Bisa pilih pendek aman jika angle belum bagus.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "medium",
+        advice: "Target tengah green setelah layup baik.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "hard",
+        advice: "Jaga agar tidak over ke area bahaya.",
+      },
     ],
     approachNote:
-      "Par 5. If pin is front, avoid short miss into bunker. Recommend enough club to reach middle green.",
-    verificationStatus: "draft",
+      "Par 5 ini perlu strategi, bukan hanya power. OB kiri-kanan harus dibaca.",
+    caddieFocus: "Strategi pukulan kedua dan ketiga, plus safe approach.",
   },
   {
-    hole: 11,
-    shape: "long",
-    pinZone: "middleCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "middleLeft"],
+    holeNumber: 11,
+    greenShape: "narrow",
+    approachType: "narrow",
+    safeMiss: "center",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "left", label: "Left bunker series" },
-      { type: "rough", zone: "around", label: "Tree-lined green area" },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Bunker kiri",
+        note: "Bunker kiri bisa mengganggu approach.",
+      },
+      {
+        type: "obi",
+        zone: "left",
+        label: "OB kiri",
+        note: "Miss kiri harus dihindari.",
+      },
+      {
+        type: "obi",
+        zone: "right",
+        label: "OB kanan",
+        note: "Jaga rekomendasi tidak membuka miss kanan.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Pilih club cukup dan target center.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "medium",
+        advice: "Jangan terlalu agresif kanan-kiri.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "hard",
+        advice: "Kontrol carry dan hindari over.",
+      },
     ],
     approachNote:
-      "Kanan-kiri OBI on the hole. Approach should favor controlled center green.",
-    verificationStatus: "draft",
+      "Hole 11 menuntut disiplin arah karena kanan-kiri OB.",
+    caddieFocus: "Akurasi rekomendasi, bukan agresivitas.",
   },
   {
-    hole: 12,
-    shape: "irregular",
-    pinZone: "middleCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontRight", "middleRight"],
+    holeNumber: 12,
+    greenShape: "round",
+    approachType: "guarded",
+    safeMiss: "front",
+    dangerousMiss: ["right", "back"],
     hazards: [
-      { type: "bunker", zone: "right", label: "Right-side bunker near green" },
-      { type: "dropZone", zone: "right", label: "Drop zone right of green / pohon miring" },
+      {
+        type: "dropZone",
+        zone: "right",
+        label: "Drop zone kanan green",
+        note: "Dipakai saat skenario penalty/hazard aktif.",
+      },
+      {
+        type: "rough",
+        zone: "aroundGreen",
+        label: "Rough sekitar green",
+        note: "Recovery masih mungkin, tapi jangan terlalu miss.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Jangan pendek terlalu jauh.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "easy",
+        advice: "Target tengah green.",
+      },
+      {
+        zone: "backRight",
+        label: "Pin belakang kanan",
+        difficulty: "hard",
+        advice: "Hindari miss kanan.",
+      },
     ],
     approachNote:
-      "Par 3. Avoid right-side miss if pin is right. Safer target is middle green.",
-    verificationStatus: "draft",
+      "Par 3 dengan drop zone kanan. Caddie harus hati-hati membaca target kanan.",
+    caddieFocus: "Club selection dan arah target aman.",
   },
   {
-    hole: 13,
-    shape: "long",
-    pinZone: "middleRight",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "frontRight"],
+    holeNumber: 13,
+    greenShape: "oval",
+    approachType: "guarded",
+    safeMiss: "center",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "frontLeft", label: "Left bunker near green" },
-      { type: "bunker", zone: "frontRight", label: "Right bunker near green" },
+      {
+        type: "bunker",
+        zone: "right",
+        label: "Bunker kanan",
+        note: "Hindari miss kanan jika pin kanan.",
+      },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Bunker kiri",
+        note: "Bunker kiri aktif untuk approach agresif.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Target depan tengah jika player kurang kontrol.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "easy",
+        advice: "Center green aman.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "medium",
+        advice: "Perhatikan carry dan rollout.",
+      },
     ],
     approachNote:
-      "If pin is right, avoid overcommitting toward bunker side. Center-right is safer.",
-    verificationStatus: "draft",
+      "Hole 13 cukup seimbang, tapi bunker kiri-kanan tetap harus diperhitungkan.",
+    caddieFocus: "Baca arah bunker dan sesuaikan dengan kemampuan player.",
   },
   {
-    hole: 14,
-    shape: "long",
-    pinZone: "middleCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "frontRight"],
+    holeNumber: 14,
+    greenShape: "split",
+    approachType: "riskReward",
+    safeMiss: "center",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "left", label: "Left bunker near green" },
-      { type: "bunker", zone: "right", label: "Right bunker near green" },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Bunker kiri",
+        note: "Jangan memaksa target kiri jika risiko tinggi.",
+      },
+      {
+        type: "penalty",
+        zone: "right",
+        label: "Penalty kanan",
+        note: "Miss kanan berisiko penalty.",
+      },
+      {
+        type: "obi",
+        zone: "left",
+        label: "OB kiri",
+        note: "Miss kiri juga berbahaya.",
+      },
+      {
+        type: "water",
+        zone: "approach",
+        label: "Area air/jembatan",
+        note: "Perlu pertimbangan layup sebelum approach.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Pilih landing aman sebelum green.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "medium",
+        advice: "Target tengah jika angle sudah bagus.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "hard",
+        advice: "Jangan terlalu agresif jika belum di posisi ideal.",
+      },
     ],
     approachNote:
-      "Split fairway par 5. Approach strategy should depend on layup position and bunker angle.",
-    verificationStatus: "draft",
+      "Hole 14 split fairway. Caddie harus menentukan jalur aman dan kapan layup.",
+    caddieFocus: "Strategi split fairway, penalty awareness, dan layup.",
   },
   {
-    hole: 15,
-    shape: "narrow",
-    pinZone: "middleCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["middleLeft", "middleRight"],
+    holeNumber: 15,
+    greenShape: "angled",
+    approachType: "guarded",
+    safeMiss: "center",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "left", label: "Left bunker complex" },
-      { type: "bunker", zone: "right", label: "Right bunker" },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Bunker kiri",
+        note: "Area kiri harus diperhatikan saat approach.",
+      },
+      {
+        type: "bunker",
+        zone: "right",
+        label: "Bunker kanan",
+        note: "Miss kanan berpotensi masuk bunker.",
+      },
+      {
+        type: "penalty",
+        zone: "right",
+        label: "Penalty kanan dekat HH",
+        note: "Jangan memberi target terlalu kanan.",
+      },
+      {
+        type: "obi",
+        zone: "left",
+        label: "OB kiri",
+        note: "Miss kiri juga sangat berisiko.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Target aman ke depan tengah.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "medium",
+        advice: "Gunakan center green sebagai target utama.",
+      },
+      {
+        zone: "backRight",
+        label: "Pin belakang kanan",
+        difficulty: "hard",
+        advice: "Jangan attack jika penalty kanan aktif.",
+      },
     ],
     approachNote:
-      "Narrow green feel. Recommend center target unless pin has clearly safe access.",
-    verificationStatus: "draft",
+      "Hole 15 memiliki penalty kanan dan OB kiri, sehingga target harus disiplin.",
+    caddieFocus: "Hindari dua sisi bahaya dan pilih target konservatif.",
   },
   {
-    hole: 16,
-    shape: "round",
-    pinZone: "middleLeft",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "frontRight", "backLeft"],
+    holeNumber: 16,
+    greenShape: "round",
+    approachType: "guarded",
+    safeMiss: "front",
+    dangerousMiss: ["left", "right", "back"],
     hazards: [
-      { type: "bunker", zone: "frontLeft", label: "Front-left bunker" },
-      { type: "bunker", zone: "frontRight", label: "Front-right bunker" },
-      { type: "dropZone", zone: "left", label: "Drop zone 50m left side of green" },
+      {
+        type: "dropZone",
+        zone: "left",
+        label: "Drop zone kiri green",
+        note: "Dipakai jika skenario hazard/penalty aktif.",
+      },
+      {
+        type: "rough",
+        zone: "aroundGreen",
+        label: "Rough sekitar green",
+        note: "Recovery masih mungkin, tapi target tetap harus aman.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Pilih club yang tidak short terlalu jauh.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "easy",
+        advice: "Center green adalah pilihan paling aman.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "hard",
+        advice: "Kontrol jarak agar tidak over.",
+      },
     ],
     approachNote:
-      "Par 3. If pin is left, do not short-side the player near bunker/drop-zone side.",
-    verificationStatus: "draft",
+      "Par 3 pendek-menengah. Kesalahan biasanya dari club selection atau overconfidence.",
+    caddieFocus: "Pilih club sesuai tee dan jangan terlalu agresif.",
   },
   {
-    hole: 17,
-    shape: "wide",
-    pinZone: "middleCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["frontLeft", "frontRight"],
+    holeNumber: 17,
+    greenShape: "narrow",
+    approachType: "narrow",
+    safeMiss: "front",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "frontLeft", label: "Front-left bunker" },
-      { type: "bunker", zone: "frontRight", label: "Front-right bunker" },
-      { type: "bunker", zone: "backRight", label: "Back-right bunker" },
+      {
+        type: "bunker",
+        zone: "center",
+        label: "Bunker tengah",
+        note: "Jangan target langsung ke bunker tengah.",
+      },
+      {
+        type: "bunker",
+        zone: "left",
+        label: "Bunker kiri",
+        note: "Miss kiri bisa menyulitkan recovery.",
+      },
+      {
+        type: "bunker",
+        zone: "right",
+        label: "Bunker kanan",
+        note: "Miss kanan dekat green perlu dihindari.",
+      },
+      {
+        type: "obi",
+        zone: "left",
+        label: "OB kiri",
+        note: "Kiri sangat berisiko.",
+      },
+      {
+        type: "obi",
+        zone: "right",
+        label: "OB kanan",
+        note: "Kanan juga sangat berisiko.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Short front masih lebih aman daripada miss kanan-kiri.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "hard",
+        advice: "Perlu target presisi karena bunker tengah.",
+      },
+      {
+        zone: "back",
+        label: "Pin belakang",
+        difficulty: "hard",
+        advice: "Jangan mengejar pin jika akurasi player rendah.",
+      },
     ],
     approachNote:
-      "OBI both sides on the hole. Center green target reduces unnecessary risk.",
-    verificationStatus: "draft",
+      "Hole 17 sangat menuntut akurasi karena kanan-kiri OB dan banyak bunker.",
+    caddieFocus: "Minimalkan risiko, pilih target paling aman, dan hindari bunker tengah.",
   },
   {
-    hole: 18,
-    shape: "long",
-    pinZone: "middleCenter",
-    safeAimZone: "middleCenter",
-    protectedZones: ["middleRight", "frontRight"],
+    holeNumber: 18,
+    greenShape: "oval",
+    approachType: "guarded",
+    safeMiss: "center",
+    dangerousMiss: ["left", "right"],
     hazards: [
-      { type: "bunker", zone: "right", label: "Right bunker near green" },
-      { type: "penalty", zone: "left", label: "Left penalty side on hole" },
-      { type: "rough", zone: "around", label: "Closing hole pressure area" },
+      {
+        type: "bunker",
+        zone: "right",
+        label: "Bunker kanan",
+        note: "Miss kanan bisa masuk bunker.",
+      },
+      {
+        type: "penalty",
+        zone: "left",
+        label: "Penalty kiri",
+        note: "Miss kiri berisiko penalty.",
+      },
+      {
+        type: "obi",
+        zone: "right",
+        label: "OB kanan",
+        note: "Jangan buka target terlalu kanan.",
+      },
+    ],
+    pinZones: [
+      {
+        zone: "front",
+        label: "Pin depan",
+        difficulty: "medium",
+        advice: "Target depan tengah jika ingin aman.",
+      },
+      {
+        zone: "middle",
+        label: "Pin tengah",
+        difficulty: "easy",
+        advice: "Center green paling stabil.",
+      },
+      {
+        zone: "backRight",
+        label: "Pin belakang kanan",
+        difficulty: "hard",
+        advice: "Hindari kanan karena bunker dan OB.",
+      },
     ],
     approachNote:
-      "Closing par 4. Left penalty and right OBI context make center-green strategy safer.",
-    verificationStatus: "draft",
+      "Hole penutup menuntut keputusan aman karena ada penalty kiri dan OB kanan.",
+    caddieFocus: "Jaga emosi player, pilih target disiplin, dan hindari dua sisi bahaya.",
   },
 ];
 
+export const greenDataByHole: Record<number, GreenLayout> = greenData.reduce(
+  (accumulator, green) => {
+    accumulator[green.holeNumber] = green;
+    return accumulator;
+  },
+  {} as Record<number, GreenLayout>
+);
+
 export function getGreenLayoutByHole(holeNumber: number) {
-  return greenData.find((green) => green.hole === holeNumber);
-}
-
-export function isPinProtected(green: GreenLayout) {
-  return green.protectedZones.includes(green.pinZone);
-}
-
-export function getGreenStrategyAdvice(green: GreenLayout) {
-  const protectedPin = isPinProtected(green);
-
-  if (protectedPin) {
-    return `Pin is in a protected zone. Safer recommendation: aim ${formatPinZone(
-      green.safeAimZone
-    )}, not directly at the flag.`;
-  }
-
-  return `Pin is not heavily protected. Direct approach can be acceptable if club distance and player control are reliable.`;
-}
-
-export function formatPinZone(zone: GreenPinZone) {
-  const labels: Record<GreenPinZone, string> = {
-    frontLeft: "front-left",
-    frontCenter: "front-center",
-    frontRight: "front-right",
-    middleLeft: "middle-left",
-    middleCenter: "middle-center",
-    middleRight: "middle-right",
-    backLeft: "back-left",
-    backCenter: "back-center",
-    backRight: "back-right",
-  };
-
-  return labels[zone];
+  return greenDataByHole[holeNumber] ?? greenData[0];
 }
