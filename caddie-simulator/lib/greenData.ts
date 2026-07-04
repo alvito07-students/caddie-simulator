@@ -35,6 +35,8 @@ export type PinZone = {
   advice: string;
 };
 
+export type GreenPinZone = PinZone;
+
 export type GreenLayout = {
   holeNumber: number;
   greenShape: "round" | "oval" | "wide" | "narrow" | "angled" | "split";
@@ -102,7 +104,8 @@ export const greenData: GreenLayout[] = [
     ],
     approachNote:
       "Hole 1 menuntut caddie menjaga arah rekomendasi tetap aman karena ada risiko kanan dan kiri.",
-    caddieFocus: "Target aman, hindari miss kanan-kiri, dan prioritaskan center green.",
+    caddieFocus:
+      "Target aman, hindari miss kanan-kiri, dan prioritaskan center green.",
   },
   {
     holeNumber: 2,
@@ -158,7 +161,7 @@ export const greenData: GreenLayout[] = [
       {
         type: "water",
         zone: "approach",
-        label: "Area air sebelum fairway/approach",
+        label: "Area air sebelum fairway atau approach",
         note: "Pastikan rekomendasi tidak memaksa carry berisiko.",
       },
       {
@@ -185,12 +188,13 @@ export const greenData: GreenLayout[] = [
         zone: "back",
         label: "Pin belakang",
         difficulty: "hard",
-        advice: "Gunakan club cukup, tapi jangan over-aggressive.",
+        advice: "Gunakan club cukup, tapi jangan terlalu agresif.",
       },
     ],
     approachNote:
       "Par 5 ini menuntut caddie mengatur strategi bertahap, bukan hanya mengejar jarak maksimal.",
-    caddieFocus: "Course management, layup decision, dan membaca risiko carry.",
+    caddieFocus:
+      "Course management, layup decision, dan membaca risiko carry.",
   },
   {
     holeNumber: 4,
@@ -341,7 +345,7 @@ export const greenData: GreenLayout[] = [
         type: "dropZone",
         zone: "front",
         label: "Drop zone depan tee ladies",
-        note: "Digunakan saat skenario penalty/hazard aktif.",
+        note: "Digunakan saat skenario penalty atau hazard aktif.",
       },
       {
         type: "rough",
@@ -452,7 +456,7 @@ export const greenData: GreenLayout[] = [
       {
         type: "penalty",
         zone: "left",
-        label: "Penalty/ilalang area",
+        label: "Penalty atau ilalang area",
         note: "Area penalty harus jadi pertimbangan sebelum attack.",
       },
     ],
@@ -597,7 +601,7 @@ export const greenData: GreenLayout[] = [
         type: "dropZone",
         zone: "right",
         label: "Drop zone kanan green",
-        note: "Dipakai saat skenario penalty/hazard aktif.",
+        note: "Dipakai saat skenario penalty atau hazard aktif.",
       },
       {
         type: "rough",
@@ -702,7 +706,7 @@ export const greenData: GreenLayout[] = [
       {
         type: "water",
         zone: "approach",
-        label: "Area air/jembatan",
+        label: "Area air atau jembatan",
         note: "Perlu pertimbangan layup sebelum approach.",
       },
     ],
@@ -797,7 +801,7 @@ export const greenData: GreenLayout[] = [
         type: "dropZone",
         zone: "left",
         label: "Drop zone kiri green",
-        note: "Dipakai jika skenario hazard/penalty aktif.",
+        note: "Dipakai jika skenario hazard atau penalty aktif.",
       },
       {
         type: "rough",
@@ -890,7 +894,8 @@ export const greenData: GreenLayout[] = [
     ],
     approachNote:
       "Hole 17 sangat menuntut akurasi karena kanan-kiri OB dan banyak bunker.",
-    caddieFocus: "Minimalkan risiko, pilih target paling aman, dan hindari bunker tengah.",
+    caddieFocus:
+      "Minimalkan risiko, pilih target paling aman, dan hindari bunker tengah.",
   },
   {
     holeNumber: 18,
@@ -940,7 +945,8 @@ export const greenData: GreenLayout[] = [
     ],
     approachNote:
       "Hole penutup menuntut keputusan aman karena ada penalty kiri dan OB kanan.",
-    caddieFocus: "Jaga emosi player, pilih target disiplin, dan hindari dua sisi bahaya.",
+    caddieFocus:
+      "Jaga emosi player, pilih target disiplin, dan hindari dua sisi bahaya.",
   },
 ];
 
@@ -954,4 +960,27 @@ export const greenDataByHole: Record<number, GreenLayout> = greenData.reduce(
 
 export function getGreenLayoutByHole(holeNumber: number) {
   return greenDataByHole[holeNumber] ?? greenData[0];
+}
+
+export function formatPinZone(pinZone?: GreenPinZone | null) {
+  if (!pinZone) {
+    return "Pin position belum dipilih";
+  }
+
+  return `${pinZone.label} · ${pinZone.difficulty}`;
+}
+
+export function getGreenStrategyAdvice(
+  greenLayout?: GreenLayout | null,
+  pinZone?: GreenPinZone | null
+) {
+  if (!greenLayout) {
+    return "Baca posisi green, hazard, dan kemampuan player sebelum memberi rekomendasi.";
+  }
+
+  const pinAdvice = pinZone?.advice
+    ? ` Pin advice: ${pinZone.advice}`
+    : "";
+
+  return `${greenLayout.caddieFocus} ${greenLayout.approachNote}${pinAdvice}`;
 }
